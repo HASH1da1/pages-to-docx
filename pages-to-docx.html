@@ -1,0 +1,1825 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pages → Word 変換（ローカル完結）</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --panel: #ffffff; --ink: #1d1d1b; --sub: #6b6a66; --line: #e3e1db;
+    --accent: #2f5bd3; --accent-ink: #ffffff; --accent-soft: #e8eefc;
+    --ok: #1f7a4d; --ok-soft: #e4f3ea; --warn: #8a5a00; --warn-soft: #fbf1dc; --err: #b42318; --err-soft: #fdecea;
+    --radius: 14px;
+    --font: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161615; --panel: #201f1d; --ink: #ecebe7; --sub: #a3a19a; --line: #34332f;
+      --accent: #7c9bff; --accent-ink: #0f1424; --accent-soft: #232b45;
+      --ok: #6fd3a0; --ok-soft: #17301f; --warn: #f0c062; --warn-soft: #33290f; --err: #ff8a80; --err-soft: #3a1b18;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font); line-height: 1.6; }
+  main { max-width: 880px; margin: 0 auto; padding: 40px 20px 64px; }
+  header h1 { font-size: 26px; letter-spacing: .01em; margin: 0 0 4px; }
+  header p { margin: 0; color: var(--sub); font-size: 14px; }
+  .badge { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ok); background: var(--ok-soft);
+    padding: 3px 10px; border-radius: 999px; margin-top: 12px; }
+  .badge svg { width: 14px; height: 14px; }
+
+  .drop { margin-top: 24px; border: 2px dashed var(--line); background: var(--panel); border-radius: var(--radius);
+    padding: 36px 20px; text-align: center; transition: border-color .15s, background .15s; }
+  .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+  .drop .big { font-size: 17px; font-weight: 600; margin: 8px 0 4px; }
+  .drop .small { color: var(--sub); font-size: 13px; margin: 0 0 16px; }
+  .drop svg.icon { width: 40px; height: 40px; color: var(--accent); }
+  .btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  button, .btn { font: inherit; font-size: 14px; border-radius: 10px; padding: 8px 16px; cursor: pointer; border: 1px solid var(--line);
+    background: var(--panel); color: var(--ink); }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+  button:hover { filter: brightness(0.97); }
+  button:disabled { opacity: .5; cursor: default; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  input[type=file] { display: none; }
+
+  .opts { margin-top: 18px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; }
+  .opts h2 { font-size: 14px; margin: 0 0 12px; color: var(--sub); font-weight: 600; letter-spacing: .04em; }
+  .row { display: grid; grid-template-columns: 120px 1fr; gap: 10px 16px; align-items: start; margin-bottom: 12px; }
+  .row:last-child { margin-bottom: 0; }
+  .row > .lbl { font-size: 14px; font-weight: 600; padding-top: 6px; }
+  .seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .seg label { padding: 6px 14px; font-size: 13.5px; cursor: pointer; border-right: 1px solid var(--line); user-select: none; }
+  .seg label:last-child { border-right: 0; }
+  .seg input { display: none; }
+  .seg input:checked + span { color: var(--accent); font-weight: 700; }
+  .seg label:has(input:checked) { background: var(--accent-soft); }
+  .hint { font-size: 12.5px; color: var(--sub); margin-top: 4px; }
+  .checks { display: flex; flex-direction: column; gap: 6px; padding-top: 4px; }
+  .checks label { font-size: 14px; display: flex; gap: 8px; align-items: center; cursor: pointer; }
+  .checks input { width: 16px; height: 16px; accent-color: var(--accent); }
+
+  .list-head { display: flex; justify-content: space-between; align-items: center; margin: 28px 0 10px; }
+  .list-head h2 { font-size: 16px; margin: 0; }
+  .list-head .actions { display: flex; gap: 8px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin-bottom: 12px;
+    display: grid; grid-template-columns: 72px 1fr; gap: 16px; }
+  .thumb { width: 72px; height: 96px; border-radius: 6px; background: var(--bg); border: 1px solid var(--line); object-fit: cover; object-position: top;
+    display: flex; align-items: center; justify-content: center; color: var(--sub); font-size: 11px; overflow: hidden; }
+  .card .name { font-weight: 700; font-size: 15px; word-break: break-all; }
+  .meta { font-size: 12.5px; color: var(--sub); margin-top: 2px; }
+  .status { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; margin-left: 6px; vertical-align: 1px; font-weight: 600; }
+  .status.ok { color: var(--ok); background: var(--ok-soft); }
+  .status.busy { color: var(--accent); background: var(--accent-soft); }
+  .status.err { color: var(--err); background: var(--err-soft); }
+  .warns { margin: 10px 0 0; padding: 8px 12px 8px 28px; background: var(--warn-soft); color: var(--warn); border-radius: 10px; font-size: 13px; }
+  .warns li { margin: 2px 0; }
+  .error { margin-top: 10px; padding: 10px 12px; background: var(--err-soft); color: var(--err); border-radius: 10px; font-size: 13.5px; }
+  .card .btns { justify-content: flex-start; margin-top: 12px; }
+  .preview { margin-top: 12px; border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; max-height: 420px; overflow: auto;
+    font-size: 14px; background: var(--bg); display: none; }
+  .preview.open { display: block; }
+  .preview h1, .preview h2, .preview h3, .preview h4, .preview h5, .preview h6 { margin: .8em 0 .3em; line-height: 1.35; }
+  .preview h1 { font-size: 1.5em; } .preview h2 { font-size: 1.3em; } .preview h3 { font-size: 1.15em; } .preview h4, .preview h5, .preview h6 { font-size: 1em; }
+  .preview .pv-title { text-align: center; } .preview .pv-subtitle { text-align: center; color: var(--sub); font-weight: 500; }
+  .preview p { margin: 0 0 .35em; }
+  .preview .pv-li::before { content: "・"; margin-left: -1em; }
+  .preview .pv-ph { color: var(--sub); }
+  .preview .pv-more { color: var(--sub); font-style: italic; }
+  .preview hr { border: 0; border-top: 1px solid var(--line); }
+  .empty { color: var(--sub); font-size: 14px; text-align: center; padding: 18px; }
+
+  details.notes { margin-top: 28px; font-size: 13.5px; color: var(--sub); }
+  details.notes summary { cursor: pointer; font-weight: 600; color: var(--ink); }
+  details.notes ul { padding-left: 20px; }
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 16px;
+    border-radius: 10px; font-size: 13.5px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.show { opacity: .94; }
+  @media (max-width: 560px) {
+    .row { grid-template-columns: 1fr; gap: 4px; }
+    .card { grid-template-columns: 1fr; }
+    .thumb { display: none; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Pages → Word 変換</h1>
+    <p>Apple Pages の書類（.pages）を Word 形式（.docx）に変換します。</p>
+    <div class="badge">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+      ファイルはこのブラウザ内だけで処理され、どこにも送信されません
+    </div>
+  </header>
+
+  <section id="drop" class="drop" aria-label="ファイルのドロップ領域">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 12v6"/><path d="m9 15 3-3 3 3"/></svg>
+    <div class="big">.pages ファイルをここにドロップ</div>
+    <p class="small">複数可。フォルダ形式（パッケージ）の .pages もそのままドロップできます。</p>
+    <div class="btns">
+      <button class="primary" id="pickFiles" type="button">ファイルを選ぶ</button>
+      <button id="pickDir" type="button">フォルダを選ぶ</button>
+    </div>
+    <input id="fileInput" type="file" accept=".pages,application/x-iwork-pages-sffpages,application/vnd.apple.pages,application/zip" multiple>
+    <input id="dirInput" type="file" webkitdirectory directory multiple>
+  </section>
+
+  <section class="opts" aria-label="変換オプション">
+    <h2>変換オプション</h2>
+    <div class="row">
+      <div class="lbl">変換モード</div>
+      <div>
+        <div class="seg" role="radiogroup">
+          <label><input type="radio" name="mode" value="full" checked><span>見た目を保持</span></label>
+          <label><input type="radio" name="mode" value="structure"><span>構造のみ</span></label>
+        </div>
+        <div class="hint" id="modeHint"></div>
+      </div>
+    </div>
+    <div class="row" id="fontRow">
+      <div class="lbl">フォント</div>
+      <div>
+        <div class="seg" role="radiogroup">
+          <label><input type="radio" name="font" value="keep" checked><span>元のまま</span></label>
+          <label><input type="radio" name="font" value="windows"><span>Windows 向けに置換</span></label>
+          <label><input type="radio" name="font" value="none"><span>指定しない</span></label>
+        </div>
+        <div class="hint" id="fontHint"></div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="lbl">その他</div>
+      <div class="checks">
+        <label><input type="checkbox" id="optImages" checked>本文中の画像を取り込む</label>
+        <label><input type="checkbox" id="optPlaceholders" checked>変換できない表・グラフの位置に［表］などの目印を入れる</label>
+        <label><input type="checkbox" id="optTextboxes">テキストボックスの文章も本文の後ろに追加する</label>
+      </div>
+    </div>
+  </section>
+
+  <div class="list-head">
+    <h2>変換結果</h2>
+    <div class="actions">
+      <button id="dlAll" type="button" disabled>すべて ZIP で保存</button>
+      <button id="clearAll" type="button" disabled>クリア</button>
+    </div>
+  </div>
+  <div id="list"><div class="empty">まだファイルがありません。</div></div>
+
+  <details class="notes">
+    <summary>変換できるもの・できないもの</summary>
+    <ul>
+      <li><b>対応形式：</b>Pages 5 以降（2013年〜現在）と Pages '09 以前の書類。単一ファイル形式・フォルダ（パッケージ）形式の両方に対応。</li>
+      <li><b>変換されるもの：</b>本文、見出し（Word の見出しスタイルに対応）、太字・斜体・下線・取り消し線・上付き/下付き、フォント・サイズ・文字色、段落の配置・インデント・行間・段落間隔、箇条書き・番号付きリスト、リンク、脚注、本文中に配置された画像（PNG・JPEG・GIF）、改ページ。</li>
+      <li><b>変換されないもの：</b>表、グラフ、図形、浮動配置の画像、ヘッダー/フッター、コメント、ページレイアウト書類の配置（文章だけ取り出します）。</li>
+      <li><b>パスワード付きの書類</b>は変換できません。Pages でパスワードを解除してから変換してください。</li>
+      <li>「構造のみ」で変換した .docx は、pandoc などで Markdown に変換するときに見出しやリストがきれいに残ります。</li>
+    </ul>
+  </details>
+</main>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+/* =====================================================================
+ * Pages → DOCX converter core
+ *   - Pages 2013 以降 (IWA: Snappy + Protocol Buffers)
+ *   - Pages '09 以前 (index.xml / index.xml.gz)
+ * 外部ライブラリ不要・通信なし。ブラウザ（と Node 18+ でのテスト）で動作。
+ * ===================================================================== */
+(function (root) {
+  'use strict';
+
+  const td = new TextDecoder('utf-8');
+  const te = new TextEncoder();
+
+  class ConvertError extends Error {
+    constructor(msg) { super(msg); this.name = 'ConvertError'; }
+  }
+
+  // ------------------------------------------------------------------
+  // バイト列ユーティリティ
+  // ------------------------------------------------------------------
+  function concat(arrs) {
+    let n = 0;
+    for (const a of arrs) n += a.length;
+    const out = new Uint8Array(n);
+    let o = 0;
+    for (const a of arrs) { out.set(a, o); o += a.length; }
+    return out;
+  }
+
+  async function pipe(u8, transform) {
+    const s = new Blob([u8]).stream().pipeThrough(transform);
+    return new Uint8Array(await new Response(s).arrayBuffer());
+  }
+  const inflateRaw = (u8) => pipe(u8, new DecompressionStream('deflate-raw'));
+  const gunzip = (u8) => pipe(u8, new DecompressionStream('gzip'));
+  async function deflateRaw(u8) {
+    if (typeof CompressionStream === 'undefined') return null;
+    try { return await pipe(u8, new CompressionStream('deflate-raw')); } catch (_) { return null; }
+  }
+
+  // ------------------------------------------------------------------
+  // ZIP 読み込み
+  // ------------------------------------------------------------------
+  const PWD_MSG = 'パスワードで保護された書類は変換できません。Pages でパスワードを解除して保存し直してから、もう一度お試しください。';
+
+  function readZip(u8) {
+    const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+    let eocd = -1;
+    for (let i = u8.length - 22; i >= Math.max(0, u8.length - 65557); i--) {
+      if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+    }
+    if (eocd < 0) throw new ConvertError('ZIP 形式として読み込めませんでした（.pages ファイルではない可能性があります）。');
+    let count = dv.getUint16(eocd + 10, true);
+    let cdOff = dv.getUint32(eocd + 16, true);
+    if (cdOff === 0xffffffff || count === 0xffff) {
+      const loc = eocd - 20;
+      if (loc >= 0 && dv.getUint32(loc, true) === 0x07064b50) {
+        const z = Number(dv.getBigUint64(loc + 8, true));
+        if (dv.getUint32(z, true) === 0x06064b50) {
+          count = Number(dv.getBigUint64(z + 32, true));
+          cdOff = Number(dv.getBigUint64(z + 48, true));
+        }
+      }
+    }
+    const entries = new Map();
+    let p = cdOff;
+    for (let k = 0; k < count; k++) {
+      if (p + 46 > u8.length || dv.getUint32(p, true) !== 0x02014b50) {
+        throw new ConvertError('ZIP の目録が壊れています。');
+      }
+      const flags = dv.getUint16(p + 8, true);
+      const method = dv.getUint16(p + 10, true);
+      let csize = dv.getUint32(p + 20, true);
+      let usize = dv.getUint32(p + 24, true);
+      const nlen = dv.getUint16(p + 28, true);
+      const xlen = dv.getUint16(p + 30, true);
+      const clen = dv.getUint16(p + 32, true);
+      let lho = dv.getUint32(p + 42, true);
+      const name = td.decode(u8.subarray(p + 46, p + 46 + nlen));
+      let x = p + 46 + nlen;
+      const xe = x + xlen;
+      while (x + 4 <= xe) {
+        const id = dv.getUint16(x, true), sz = dv.getUint16(x + 2, true);
+        if (id === 1) {
+          let q = x + 4;
+          if (usize === 0xffffffff) { usize = Number(dv.getBigUint64(q, true)); q += 8; }
+          if (csize === 0xffffffff) { csize = Number(dv.getBigUint64(q, true)); q += 8; }
+          if (lho === 0xffffffff) { lho = Number(dv.getBigUint64(q, true)); q += 8; }
+        }
+        x += 4 + sz;
+      }
+      entries.set(name, { flags, method, csize, usize, lho });
+      p = xe + clen;
+    }
+    async function read(name) {
+      const e = entries.get(name);
+      if (!e) return null;
+      if (e.flags & 1) throw new ConvertError(PWD_MSG);
+      if (dv.getUint32(e.lho, true) !== 0x04034b50) throw new ConvertError('ZIP のデータが壊れています。');
+      const start = e.lho + 30 + dv.getUint16(e.lho + 26, true) + dv.getUint16(e.lho + 28, true);
+      const data = u8.subarray(start, start + e.csize);
+      if (e.method === 0) return data;
+      if (e.method === 8) return inflateRaw(data);
+      throw new ConvertError('この書類は暗号化されているため読み込めません。' + PWD_MSG);
+    }
+    return { names: [...entries.keys()].filter((n) => !n.endsWith('/')), read };
+  }
+
+  function fsFromMap(map) {
+    return { names: [...map.keys()], read: async (n) => (map.has(n) ? map.get(n) : null) };
+  }
+
+  function prefixedFs(fs, prefix) {
+    return {
+      names: fs.names.filter((n) => n.startsWith(prefix)).map((n) => n.slice(prefix.length)),
+      read: (n) => fs.read(prefix + n),
+    };
+  }
+
+  const isMarker = (n) => /^(Index\/|Index\.zip$|index\.xml(\.gz)?$|\.iwph$|\.iwpv2$|preview\.jpg$)/.test(n);
+
+  async function openPackage(input) {
+    let fs = input instanceof Uint8Array ? readZip(input) : fsFromMap(input);
+    // バンドルを丸ごと zip した場合など、最上位フォルダを剥がす
+    for (let guard = 0; guard < 3 && !fs.names.some(isMarker); guard++) {
+      const tops = new Set(fs.names.map((n) => n.split('/')[0]));
+      const dirs = [...tops].filter((t) => fs.names.some((n) => n.startsWith(t + '/')));
+      const pagesDir = dirs.find((d) => /\.pages$/i.test(d)) || (dirs.length === 1 ? dirs[0] : null);
+      if (!pagesDir) break;
+      fs = prefixedFs(fs, pagesDir + '/');
+    }
+    // 初期の Pages 5 は Index.zip の中に .iwa を格納
+    if (fs.names.includes('Index.zip') && !fs.names.some((n) => /^Index\/.+\.iwa$/.test(n))) {
+      const inner = readZip(await fs.read('Index.zip'));
+      const outer = fs;
+      const map = new Map();
+      for (const n of inner.names) map.set(n.startsWith('Index/') ? n : 'Index/' + n, n);
+      fs = {
+        names: [...outer.names, ...map.keys()],
+        read: (n) => (map.has(n) ? inner.read(map.get(n)) : outer.read(n)),
+      };
+    }
+    return fs;
+  }
+
+  // ------------------------------------------------------------------
+  // Snappy / IWA / Protocol Buffers
+  // ------------------------------------------------------------------
+  function readVarint(b, p) {
+    let r = 0, m = 1, x;
+    do {
+      if (p >= b.length) throw new Error('varint が途中で終わっています');
+      x = b[p++];
+      r += (x & 0x7f) * m;
+      m *= 128;
+    } while (x & 0x80);
+    return [r, p];
+  }
+
+  function snappyUncompress(src) {
+    let [len, pos] = readVarint(src, 0);
+    const out = new Uint8Array(len);
+    let op = 0;
+    while (pos < src.length) {
+      const tag = src[pos++];
+      const t = tag & 3;
+      if (t === 0) {
+        let l = tag >> 2;
+        if (l >= 60) {
+          const n = l - 59;
+          l = 0;
+          for (let i = 0; i < n; i++) l += src[pos++] * 2 ** (8 * i);
+        }
+        l += 1;
+        out.set(src.subarray(pos, pos + l), op);
+        pos += l; op += l;
+      } else {
+        let l, off;
+        if (t === 1) { l = ((tag >> 2) & 7) + 4; off = ((tag >> 5) << 8) | src[pos++]; }
+        else if (t === 2) { l = (tag >> 2) + 1; off = src[pos] | (src[pos + 1] << 8); pos += 2; }
+        else { l = (tag >> 2) + 1; off = (src[pos] | (src[pos + 1] << 8) | (src[pos + 2] << 16) | (src[pos + 3] << 24)) >>> 0; pos += 4; }
+        if (off === 0 || off > op || op + l > len) throw new Error('Snappy データが壊れています');
+        for (let i = 0; i < l; i++, op++) out[op] = out[op - off];
+      }
+    }
+    return op === len ? out : out.subarray(0, op);
+  }
+
+  function iwaDecompress(u8) {
+    const parts = [];
+    let p = 0;
+    while (p + 4 <= u8.length) {
+      const type = u8[p];
+      const len = u8[p + 1] | (u8[p + 2] << 8) | (u8[p + 3] << 16);
+      p += 4;
+      const chunk = u8.subarray(p, p + len);
+      p += len;
+      if (type !== 0) throw new ConvertError(PWD_MSG);
+      let dec;
+      try { dec = snappyUncompress(chunk); } catch (_) { dec = chunk; }
+      parts.push(dec);
+    }
+    return concat(parts);
+  }
+
+  function pb(b) {
+    const f = new Map();
+    let p = 0;
+    while (p < b.length) {
+      let key;
+      [key, p] = readVarint(b, p);
+      const fn = Math.floor(key / 8), wt = key % 8;
+      let v;
+      if (wt === 0) [v, p] = readVarint(b, p);
+      else if (wt === 1) { v = b.subarray(p, p + 8); p += 8; }
+      else if (wt === 2) { let l; [l, p] = readVarint(b, p); v = b.subarray(p, p + l); p += l; }
+      else if (wt === 5) { v = b.subarray(p, p + 4); p += 4; }
+      else throw new Error('不正な wire type ' + wt);
+      if (p > b.length) throw new Error('メッセージが途中で終わっています');
+      let a = f.get(fn);
+      if (!a) { a = []; f.set(fn, a); }
+      a.push({ w: wt, v });
+    }
+    return f;
+  }
+  function safePb(b) { try { return pb(b); } catch (_) { return new Map(); } }
+
+  const f32 = (u8) => new DataView(u8.buffer, u8.byteOffset, 4).getFloat32(0, true);
+
+  const P = {
+    has: (m, f) => !!m && m.has(f),
+    num(m, f) {
+      const a = m && m.get(f);
+      if (a) for (const e of a) if (e.w === 0) return e.v;
+      return undefined;
+    },
+    nums(m, f) {
+      const a = m && m.get(f), out = [];
+      if (a) for (const e of a) {
+        if (e.w === 0) out.push(e.v);
+        else if (e.w === 2) { let p = 0, v; while (p < e.v.length) { [v, p] = readVarint(e.v, p); out.push(v); } }
+      }
+      return out;
+    },
+    bool(m, f) { const v = P.num(m, f); return v === undefined ? undefined : v !== 0; },
+    flt(m, f) {
+      const a = m && m.get(f);
+      if (a) for (const e of a) if (e.w === 5) return f32(e.v);
+      return undefined;
+    },
+    flts(m, f) {
+      const a = m && m.get(f), out = [];
+      if (a) for (const e of a) {
+        if (e.w === 5) out.push(f32(e.v));
+        else if (e.w === 2) for (let i = 0; i + 4 <= e.v.length; i += 4) out.push(f32(e.v.subarray(i, i + 4)));
+      }
+      return out;
+    },
+    bytes(m, f) {
+      const a = m && m.get(f);
+      if (a) for (const e of a) if (e.w === 2) return e.v;
+      return undefined;
+    },
+    str(m, f) { const b = P.bytes(m, f); return b ? td.decode(b) : undefined; },
+    strs(m, f) { const a = m && m.get(f); return a ? a.filter((e) => e.w === 2).map((e) => td.decode(e.v)) : []; },
+    msg(m, f) { const b = P.bytes(m, f); return b ? safePb(b) : undefined; },
+    msgs(m, f) { const a = m && m.get(f); return a ? a.filter((e) => e.w === 2).map((e) => safePb(e.v)) : []; },
+    ref(m, f) { const r = P.msg(m, f); const id = r && P.num(r, 1); return id === undefined ? undefined : String(id); },
+  };
+
+  function parseIwa(u8, fileName, objects) {
+    const data = iwaDecompress(u8);
+    let p = 0;
+    while (p < data.length) {
+      let len;
+      [len, p] = readVarint(data, p);
+      const info = pb(data.subarray(p, p + len));
+      p += len;
+      const id = P.num(info, 1);
+      let first = true;
+      for (const mi of P.msgs(info, 2)) {
+        const type = P.num(mi, 1);
+        const l = P.num(mi, 3) || 0;
+        const payload = data.subarray(p, p + l);
+        p += l;
+        if (first && id !== undefined) {
+          objects.set(String(id), { type, data: payload, file: fileName, m: null });
+          first = false;
+        }
+      }
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // 共通: 見出し判定・色
+  // ------------------------------------------------------------------
+  function headingOf(name) {
+    const n = String(name || '').trim().toLowerCase().replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0));
+    if (/^(title|タイトル|表題)$/.test(n)) return 'title';
+    if (/^(subtitle|サブタイトル|副題)$/.test(n)) return 'subtitle';
+    const m = n.match(/^(heading|見出し)\s*(\d)?/);
+    if (m) return Math.max(1, Math.min(6, m[2] ? +m[2] : 1));
+    return 0;
+  }
+
+  const clamp01 = (v) => Math.max(0, Math.min(1, v || 0));
+  const hex2 = (v) => Math.round(clamp01(v) * 255).toString(16).padStart(2, '0').toUpperCase();
+  const rgbHex = (r, g, b) => hex2(r) + hex2(g) + hex2(b);
+
+  function defined(o) {
+    const r = {};
+    for (const k in o) if (o[k] !== undefined) r[k] = o[k];
+    return r;
+  }
+
+  // ------------------------------------------------------------------
+  // IWA (Pages 2013+) → 中間モデル
+  // ------------------------------------------------------------------
+  const T = {
+    STORAGE: [2001, 2005], CHAR_STYLE: 2021, PARA_STYLE: 2022, LIST_STYLE: 2023,
+    DRAWABLE_ATTACH: 2003, FOOTNOTE_REF: 2008, HYPERLINK: 2032,
+    IMAGE: 3005, SHAPE: 3004, GROUP: 3008, TABLE: 6000, CHART: 5021, PACKAGE_META: 11006,
+  };
+  const KIND = { BODY: 0, HEADER: 1, FOOTNOTE: 2, TEXTBOX: 3, NOTE: 4, CELL: 5 };
+
+  function iwaColor(m) {
+    if (!m) return undefined;
+    const a = P.flt(m, 6);
+    if (a !== undefined && a < 0.01) return null;
+    const model = P.num(m, 1);
+    if (model === 3) { const w = P.flt(m, 11) || 0; return rgbHex(w, w, w); }
+    if (model === 2) {
+      const c = P.flt(m, 7) || 0, mm = P.flt(m, 8) || 0, y = P.flt(m, 9) || 0, k = P.flt(m, 10) || 0;
+      return rgbHex((1 - c) * (1 - k), (1 - mm) * (1 - k), (1 - y) * (1 - k));
+    }
+    return rgbHex(P.flt(m, 3), P.flt(m, 4), P.flt(m, 5));
+  }
+
+  function iwaCharProps(m) {
+    if (!m) return {};
+    const r = {};
+    if (P.has(m, 1)) r.bold = P.bool(m, 1);
+    if (P.has(m, 2)) r.italic = P.bool(m, 2);
+    const fs = P.flt(m, 3);
+    if (fs > 0) r.size = fs;
+    if (P.bool(m, 4)) r.font = null; else { const fn = P.str(m, 5); if (fn) r.font = fn; }
+    if (P.bool(m, 6)) r.color = null; else { const c = iwaColor(P.msg(m, 7)); if (c !== undefined) r.color = c; }
+    const sup = P.num(m, 10);
+    if (sup !== undefined) r.vert = sup === 1 ? 'superscript' : sup === 2 ? 'subscript' : 'baseline';
+    const u = P.num(m, 11);
+    if (u !== undefined) r.underline = u === 0 ? 'none' : u === 2 ? 'double' : u === 3 ? 'wave' : 'single';
+    const s = P.num(m, 12);
+    if (s !== undefined) r.strike = s === 0 ? 'none' : s === 1 ? 'single' : 'double';
+    const cap = P.num(m, 13);
+    if (cap !== undefined) r.caps = cap === 1 ? 'all' : cap === 2 ? 'small' : 'none';
+    if (P.bool(m, 25)) r.highlight = null; else { const bg = iwaColor(P.msg(m, 26)); if (bg !== undefined) r.highlight = bg; }
+    return r;
+  }
+
+  function iwaParaProps(m) {
+    if (!m) return {};
+    const r = {};
+    const a = P.num(m, 1);
+    if (a !== undefined) r.align = ['left', 'right', 'center', 'both'][a] || null;
+    r.firstIndent = P.flt(m, 7);
+    r.leftIndent = P.flt(m, 11);
+    r.rightIndent = P.flt(m, 19);
+    r.spaceAfter = P.flt(m, 20);
+    r.spaceBefore = P.flt(m, 21);
+    if (P.has(m, 10)) r.keepNext = P.bool(m, 10);
+    if (P.has(m, 14)) r.pageBreakBefore = P.bool(m, 14);
+    if (!P.bool(m, 12)) {
+      const ls = P.msg(m, 13);
+      if (ls) {
+        const mode = P.num(ls, 1) || 0, amt = P.flt(ls, 2);
+        if (amt > 0) r.lineSpacing = { mode: ['auto', 'atLeast', 'exact', 'atMost', 'between'][mode] || 'auto', amount: amt };
+      }
+    }
+    if (P.bool(m, 39)) r.listStyle = null; else { const ls = P.ref(m, 40); if (ls) r.listStyle = ls; }
+    return defined(r);
+  }
+
+  function attrEntries(m) {
+    return P.msgs(m, 1).map((e) => ({ i: P.num(e, 1) || 0, id: P.ref(e, 2) })).sort((a, b) => a.i - b.i);
+  }
+  function dataEntries(m) {
+    return P.msgs(m, 1).map((e) => ({ i: P.num(e, 1) || 0, a: P.num(e, 2) || 0, b: P.num(e, 3) || 0 })).sort((a, b) => a.i - b.i);
+  }
+  function at(entries, idx) {
+    let lo = 0, hi = entries.length - 1, r = null;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (entries[mid].i <= idx) { r = entries[mid]; lo = mid + 1; } else hi = mid - 1;
+    }
+    return r;
+  }
+  // 段落・リストのスタイル表では、object なしのエントリーは「直前と同じ」を意味する
+  function atDefined(entries, idx) {
+    let lo = 0, hi = entries.length - 1, k = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (entries[mid].i <= idx) { k = mid; lo = mid + 1; } else hi = mid - 1;
+    }
+    for (; k >= 0; k--) if (entries[k].id) return entries[k];
+    return null;
+  }
+
+  const PARA_SEP = new Set(['\n', '\u2029', '\f', '\u0004']);
+  const PAGE_BREAK = new Set(['\f', '\u0004']);
+
+  async function buildIwaModel(fs, opts) {
+    const objects = new Map();
+    const iwaNames = fs.names.filter((n) => /^Index\/.+\.iwa$/.test(n));
+    for (const n of iwaNames) {
+      const u8 = await fs.read(n);
+      try { parseIwa(u8, n, objects); }
+      catch (e) {
+        if (e instanceof ConvertError) throw e;
+        if (/Document\.iwa$|DocumentStylesheet\.iwa$/.test(n)) throw new ConvertError(`${n} の解析に失敗しました: ${e.message}`);
+      }
+    }
+    const get = (id) => {
+      if (id === undefined || id === null) return null;
+      const o = objects.get(id);
+      if (!o) return null;
+      if (!o.m) o.m = safePb(o.data);
+      return o;
+    };
+
+    // --- 画像データの所在 ---
+    const dataFiles = new Map();
+    for (const o of objects.values()) {
+      if (o.type !== T.PACKAGE_META) continue;
+      if (!o.m) o.m = safePb(o.data);
+      for (const d of P.msgs(o.m, 4)) {
+        const id = P.num(d, 1);
+        if (id !== undefined) dataFiles.set(String(id), { fileName: P.str(d, 4), preferred: P.str(d, 3) });
+      }
+    }
+    const dataNames = fs.names.filter((n) => n.startsWith('Data/'));
+    function findDataFile(id) {
+      const info = dataFiles.get(id);
+      const cands = [];
+      if (info) {
+        if (info.fileName) cands.push('Data/' + info.fileName);
+        if (info.preferred) {
+          cands.push('Data/' + info.preferred);
+          const dot = info.preferred.lastIndexOf('.');
+          if (dot > 0) cands.push('Data/' + info.preferred.slice(0, dot) + '-' + id + info.preferred.slice(dot));
+        }
+      }
+      for (const c of cands) if (fs.names.includes(c)) return c;
+      const re = new RegExp('-' + id + '\\.[A-Za-z0-9]+$');
+      return dataNames.find((n) => re.test(n)) || null;
+    }
+
+    // --- スタイル解決 ---
+    const styleCache = new Map();
+    function resolveStyle(id, depth = 0) {
+      if (id === undefined || id === null) return null;
+      if (styleCache.has(id)) return styleCache.get(id);
+      const o = get(id);
+      if (!o || depth > 40) return null;
+      styleCache.set(id, null);
+      const sup = P.msg(o.m, 1);
+      const parent = sup ? resolveStyle(P.ref(sup, 3), depth + 1) : null;
+      const own = (sup && P.str(sup, 1)) || '';
+      const res = {
+        name: own || (parent && parent.name) || '',
+        char: Object.assign({}, parent && parent.char),
+        para: Object.assign({}, parent && parent.para),
+      };
+      if (o.type === T.CHAR_STYLE || o.type === T.PARA_STYLE) Object.assign(res.char, defined(iwaCharProps(P.msg(o.m, 11))));
+      if (o.type === T.PARA_STYLE) Object.assign(res.para, iwaParaProps(P.msg(o.m, 12)));
+      styleCache.set(id, res);
+      return res;
+    }
+
+    const listCache = new Map();
+    function resolveList(id, depth = 0) {
+      if (!id) return null;
+      if (listCache.has(id)) return listCache.get(id);
+      const o = get(id);
+      if (!o || o.type !== T.LIST_STYLE || depth > 40) return null;
+      listCache.set(id, null);
+      const sup = P.msg(o.m, 1);
+      const parent = sup ? resolveList(P.ref(sup, 3), depth + 1) : null;
+      const pick = (v, k) => (v.length ? v : parent ? parent[k] : []);
+      const res = {
+        labelTypes: pick(P.nums(o.m, 11), 'labelTypes'),
+        numberTypes: pick(P.nums(o.m, 15), 'numberTypes'),
+        strings: pick(P.strs(o.m, 16), 'strings'),
+        indents: pick(P.flts(o.m, 13), 'indents'),
+        textIndents: pick(P.flts(o.m, 12), 'textIndents'),
+        tiered: pick(P.nums(o.m, 25), 'tiered'),
+      };
+      listCache.set(id, res);
+      return res;
+    }
+
+    // --- 添付物（画像・表など） ---
+    const stats = { images: 0, imagesSkipped: 0, tables: 0, charts: 0, shapes: 0, footnotes: 0, links: 0, lists: 0 };
+    async function attachmentRun(attId) {
+      const att = get(attId);
+      if (!att || att.type !== T.DRAWABLE_ATTACH) return null;
+      const dr = get(P.ref(att.m, 1));
+      if (!dr) return null;
+      if (dr.type === T.IMAGE) {
+        const ref = P.ref(dr.m, 11) || P.ref(dr.m, 13);
+        const fname = ref && findDataFile(ref);
+        const geo = P.msg(P.msg(P.msg(dr.m, 1), 1), 1);
+        const size = geo && P.msg(geo, 2);
+        const w = size && P.flt(size, 1), h = size && P.flt(size, 2);
+        if (fname && opts.images) {
+          const bytes = await fs.read(fname);
+          const img = bytes && sniffImage(bytes);
+          if (img) {
+            stats.images++;
+            return { image: { bytes, ext: img.ext, w: w || img.w * 0.75, h: h || img.h * 0.75, name: fname.slice(5) } };
+          }
+        }
+        stats.imagesSkipped++;
+        return opts.placeholders ? { text: '［画像］', props: {}, placeholder: true } : null;
+      }
+      if (dr.type === T.TABLE) { stats.tables++; return opts.placeholders ? { text: '［表］', props: {}, placeholder: true } : null; }
+      if (dr.type === T.CHART) { stats.charts++; return opts.placeholders ? { text: '［グラフ］', props: {}, placeholder: true } : null; }
+      if (dr.type === T.SHAPE || dr.type === T.GROUP || dr.type === 2011) { stats.shapes++; return null; }
+      return null;
+    }
+
+    // --- ストレージ → 段落 ---
+    async function storageToParagraphs(st, depth = 0) {
+      const text = P.strs(st, 3).join('');
+      const paraStyles = attrEntries(P.msg(st, 5));
+      const charStyles = attrEntries(P.msg(st, 8));
+      const listStyles = attrEntries(P.msg(st, 7));
+      const paraData = dataEntries(P.msg(st, 6));
+      const attachments = attrEntries(P.msg(st, 9));
+      const smart = attrEntries(P.msg(st, 11));
+      const footnotes = attrEntries(P.msg(st, 16));
+
+      const special = new Map();
+      for (const e of attachments) if (e.id) special.set(e.i, { att: e.id });
+      for (const e of footnotes) if (e.id) special.set(e.i, { fn: e.id });
+
+      const cuts = new Set();
+      for (const e of charStyles) cuts.add(e.i);
+      for (const e of smart) cuts.add(e.i);
+      for (const k of special.keys()) { cuts.add(k); cuts.add(k + 1); }
+
+      const paras = [];
+      let start = 0, pendingBreak = false;
+      for (let i = 0; i <= text.length; i++) {
+        const ch = i < text.length ? text[i] : null;
+        if (ch !== null && !PARA_SEP.has(ch)) continue;
+        const s = start, e = i;
+        start = i + 1;
+        const psEntry = atDefined(paraStyles, s);
+        const ps = resolveStyle(psEntry && psEntry.id) || { name: '', char: {}, para: {} };
+        const lsEntry = atDefined(listStyles, s);
+        let listId = lsEntry ? lsEntry.id : undefined;
+        if (listId === undefined) listId = ps.para.listStyle;
+        const pd = at(paraData, s);
+        const level = Math.min(8, pd ? pd.a : 0);
+        let list = null;
+        const ld = resolveList(listId);
+        if (ld) {
+          const lt = ld.labelTypes[Math.min(level, ld.labelTypes.length - 1)];
+          if (lt) { list = { key: listId, def: ld, level }; }
+        }
+
+        const runs = [];
+        let a = s;
+        const sortedCuts = [...cuts].filter((c) => c > s && c < e).sort((x, y) => x - y);
+        sortedCuts.push(e);
+        for (const b of sortedCuts) {
+          if (b <= a) continue;
+          const sp = special.get(a);
+          if (sp && b === a + 1) {
+            if (sp.fn && depth === 0) {
+              const ref = get(sp.fn);
+              const storage = ref && get(P.ref(ref.m, 2));
+              if (storage) {
+                stats.footnotes++;
+                runs.push({ footnote: await storageToParagraphs(storage.m, depth + 1) });
+                a = b;
+                continue;
+              }
+            }
+            if (sp.att) {
+              const r = await attachmentRun(sp.att);
+              if (r) runs.push(r);
+              a = b;
+              continue;
+            }
+          }
+          const csEntry = at(charStyles, a);
+          const cs = resolveStyle(csEntry && csEntry.id);
+          const props = Object.assign({}, ps.char, cs ? cs.char : null);
+          let link;
+          const sm = at(smart, a);
+          if (sm && sm.id) {
+            const so = get(sm.id);
+            if (so && so.type === T.HYPERLINK) link = P.str(so.m, 2);
+          }
+          const t = text.slice(a, b);
+          if (t) runs.push({ text: t, props, link });
+          a = b;
+        }
+        if (list) stats.lists++;
+        paras.push({
+          styleName: ps.name,
+          heading: headingOf(ps.name),
+          para: ps.para,
+          baseChar: ps.char,
+          list,
+          runs,
+          pageBreakBefore: pendingBreak || !!ps.para.pageBreakBefore,
+        });
+        pendingBreak = ch !== null && PAGE_BREAK.has(ch);
+      }
+      // 末尾の空段落は落とす
+      while (paras.length > 1 && !paras[paras.length - 1].runs.length && !paras[paras.length - 1].pageBreakBefore) paras.pop();
+      return paras;
+    }
+
+    // --- 本文の選択 ---
+    const storages = [];
+    for (const [id, o] of objects) {
+      if (!T.STORAGE.includes(o.type)) continue;
+      get(id);
+      const kind = P.num(o.m, 1);
+      const len = P.strs(o.m, 3).reduce((s, t) => s + t.length, 0);
+      storages.push({ id, o, kind: kind === undefined ? KIND.TEXTBOX : kind, len });
+    }
+    const footnoteStorageIds = new Set();
+    for (const o of objects.values()) {
+      if (o.type !== T.FOOTNOTE_REF) continue;
+      if (!o.m) o.m = safePb(o.data);
+      const r = P.ref(o.m, 2);
+      if (r) footnoteStorageIds.add(r);
+    }
+    const bodies = storages.filter((s) => s.kind === KIND.BODY).sort((a, b) => b.len - a.len);
+    const textboxes = storages
+      .filter((s) => s.kind === KIND.TEXTBOX && s.len > 0 && !/Stylesheet/i.test(s.o.file) && !footnoteStorageIds.has(s.id))
+      .sort((a, b) => Number(a.id) - Number(b.id));
+    const headers = storages.filter((s) => s.kind === KIND.HEADER && s.len > 0);
+
+    const warnings = [];
+    let paragraphs = [];
+    const body = bodies[0];
+    const bodyHasText = body && body.len > 1;
+    if (bodyHasText) paragraphs = await storageToParagraphs(body.o.m);
+    if (textboxes.length && (!bodyHasText || opts.textboxes)) {
+      if (!bodyHasText) warnings.push('本文がないレイアウト書類のため、テキストボックスの文章を順に取り出しました（配置は再現されません）。');
+      for (const tb of textboxes) {
+        if (paragraphs.length) paragraphs.push({ separator: true });
+        paragraphs.push(...(await storageToParagraphs(tb.o.m)));
+      }
+    } else if (textboxes.length) {
+      warnings.push(`テキストボックス ${textboxes.length} 個は変換対象外です（オプションで本文の後ろに追加できます）。`);
+    }
+    if (!paragraphs.length) throw new ConvertError('書類から文章を見つけられませんでした。');
+
+    for (const o of objects.values()) {
+      if (o.type === T.TABLE) stats._tablesAll = (stats._tablesAll || 0) + 1;
+      if (o.type === T.IMAGE) stats._imagesAll = (stats._imagesAll || 0) + 1;
+    }
+    if (stats.tables || stats._tablesAll) warnings.push(`表 ${Math.max(stats.tables, stats._tablesAll || 0)} 個は変換できません${opts.placeholders ? '（位置に［表］と表示）' : ''}。`);
+    if (stats.charts) warnings.push(`グラフ ${stats.charts} 個は変換できません。`);
+    if (stats.imagesSkipped) warnings.push(`画像 ${stats.imagesSkipped} 個は Word 非対応形式などのため取り込めませんでした。`);
+    const floating = (stats._imagesAll || 0) - stats.images - stats.imagesSkipped;
+    if (floating > 0) warnings.push(`本文に固定されていない（浮動配置の）画像や図形は取り込まれません（画像 ${floating} 個）。`);
+    if (headers.length) warnings.push('ヘッダー／フッターは変換対象外です。');
+
+    return { paragraphs, warnings, stats, format: 'Pages 2013 以降' };
+  }
+
+  // ------------------------------------------------------------------
+  // Pages '09 (XML) → 中間モデル
+  // ------------------------------------------------------------------
+  const ln = (el) => el.localName || String(el.nodeName).replace(/^.*:/, '');
+  const elChildren = (el) => {
+    const out = [];
+    for (let c = el.firstChild; c; c = c.nextSibling) if (c.nodeType === 1) out.push(c);
+    return out;
+  };
+
+  function buildXmlModel(xmlText, opts) {
+    if (typeof DOMParser === 'undefined') throw new ConvertError('この環境では XML を解析できません。');
+    const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+    if (!doc || !doc.documentElement || doc.getElementsByTagName('parsererror').length) {
+      throw new ConvertError('index.xml を解析できませんでした。');
+    }
+    const all = doc.getElementsByTagName('*');
+    const styles = new Map();
+    const textStorages = [];
+    for (let i = 0; i < all.length; i++) {
+      const el = all[i];
+      const n = ln(el);
+      if (n === 'paragraphstyle' || n === 'characterstyle') {
+        const ident = el.getAttribute('sf:ident'), id = el.getAttribute('sfa:ID');
+        if (ident && !styles.has(ident)) styles.set(ident, el);
+        if (id) styles.set(id, el);
+      } else if (n === 'text-storage') textStorages.push(el);
+    }
+
+    function propValue(el) {
+      const v = elChildren(el)[0];
+      if (!v) return undefined;
+      const k = ln(v);
+      if (k === 'number') return parseFloat(v.getAttribute('sfa:number'));
+      if (k === 'string') return v.getAttribute('sfa:string');
+      if (k === 'null') return null;
+      if (k === 'color') {
+        const a = v.getAttribute('sfa:a');
+        if (a !== null && parseFloat(a) < 0.01) return null;
+        const w = v.getAttribute('sfa:w');
+        if (w !== null) return rgbHex(+w, +w, +w);
+        return rgbHex(+v.getAttribute('sfa:r'), +v.getAttribute('sfa:g'), +v.getAttribute('sfa:b'));
+      }
+      return undefined;
+    }
+
+    const cache = new Map();
+    function resolve(key, depth = 0) {
+      if (!key) return null;
+      if (cache.has(key)) return cache.get(key);
+      const el = styles.get(key);
+      if (!el || depth > 40) return null;
+      cache.set(key, null);
+      const parent = resolve(el.getAttribute('sf:parent-ident'), depth + 1);
+      const own = el.getAttribute('sf:name') || '';
+      const res = {
+        name: own || (parent && parent.name) || '',
+        char: Object.assign({}, parent && parent.char),
+        para: Object.assign({}, parent && parent.para),
+      };
+      const pm = elChildren(el).find((c) => ln(c) === 'property-map');
+      if (pm) for (const p of elChildren(pm)) {
+        const v = propValue(p);
+        if (v === undefined) continue;
+        const c = res.char, q = res.para;
+        switch (ln(p)) {
+          case 'bold': c.bold = !!v; break;
+          case 'italic': c.italic = !!v; break;
+          case 'fontSize': if (v > 0) c.size = v; break;
+          case 'fontName': c.font = v; break;
+          case 'fontColor': c.color = v; break;
+          case 'underline': c.underline = v ? (v === 2 ? 'double' : 'single') : 'none'; break;
+          case 'strikethru': c.strike = v ? (v === 2 ? 'double' : 'single') : 'none'; break;
+          case 'superscript': c.vert = v === 1 ? 'superscript' : v === 2 ? 'subscript' : 'baseline'; break;
+          case 'capitalization': c.caps = v === 1 ? 'all' : v === 2 ? 'small' : 'none'; break;
+          case 'alignment': q.align = ['left', 'right', 'center', 'both'][v] || null; break;
+          case 'firstLineIndent': q.firstIndent = v; break;
+          case 'headIndent': q.leftIndent = v; break;
+          case 'tailIndent': q.rightIndent = v; break;
+          case 'spaceBefore': q.spaceBefore = v; break;
+          case 'spaceAfter': q.spaceAfter = v; break;
+          case 'keepWithNext': q.keepNext = !!v; break;
+          case 'pageBreakBefore': q.pageBreakBefore = !!v; break;
+          default: break;
+        }
+      }
+      cache.set(key, res);
+      return res;
+    }
+
+    const SKIP = new Set(['attachments', 'footnotes', 'headers', 'footers', 'text-storage', 'drawables',
+      'stylesheet', 'anon-styles', 'footnote', 'footnote-mark', 'attachment-ref', 'container-hint', 'page-start', 'insertion-point',
+      'selection-start', 'selection-end', 'page-number', 'page-count', 'stylesheet-ref']);
+    let footnoteGroups = [];
+    let fnCursor = 0;
+    const stats = { images: 0, imagesSkipped: 0, tables: 0, charts: 0, shapes: 0, footnotes: 0, links: 0, lists: 0 };
+
+    function paragraphFrom(pEl, pendingBreak) {
+      const ps = resolve(pEl.getAttribute('sf:style')) || { name: '', char: {}, para: {} };
+      const runs = [];
+      let breakAfter = false;
+      const rec = (node, props, link) => {
+        for (let c = node.firstChild; c; c = c.nextSibling) {
+          if (c.nodeType === 3 || c.nodeType === 4) { if (c.nodeValue) runs.push({ text: c.nodeValue, props, link }); continue; }
+          if (c.nodeType !== 1) continue;
+          const n = ln(c);
+          if (n === 'footnote' && footnoteGroups.length) {
+            const g = footnoteGroups[fnCursor++];
+            if (g) { stats.footnotes++; runs.push({ footnote: g }); }
+            continue;
+          }
+          if (SKIP.has(n)) continue;
+          if (n === 'span') { const st = resolve(c.getAttribute('sf:style')); rec(c, st ? Object.assign({}, props, st.char) : props, link); }
+          else if (n === 'link') rec(c, props, c.getAttribute('href') || link);
+          else if (n === 'tab') runs.push({ text: '\t', props, link });
+          else if (n === 'lnbr' || n === 'crbr') runs.push({ text: '\u2028', props, link });
+          else if (n === 'pgbr' || n === 'sectbr') breakAfter = true;
+          else if (n === 'br' || n === 'layoutbr' || n === 'contbr' || n === 'colbr' || n === 'footnotebr') { /* 段落終端 */ }
+          else rec(c, props, link);
+        }
+      };
+      rec(pEl, ps.char, undefined);
+      return {
+        para: {
+          styleName: ps.name, heading: headingOf(ps.name), para: ps.para, baseChar: ps.char, list: null, runs,
+          pageBreakBefore: pendingBreak || !!ps.para.pageBreakBefore,
+        },
+        breakAfter,
+      };
+    }
+
+    function collect(root) {
+      const out = [];
+      let pending = false;
+      const walk = (el) => {
+        for (const c of elChildren(el)) {
+          const n = ln(c);
+          if (n === 'p') { const r = paragraphFrom(c, pending); out.push(r.para); pending = r.breakAfter; }
+          else if (!SKIP.has(n)) walk(c);
+        }
+      };
+      walk(root);
+      return out;
+    }
+
+    const warnings = [];
+    // 'section-prototypes' 等にあるテンプレート用の本文を除外し、書類直下の本文を使う
+    const inTemplate = (el) => {
+      for (let a = el.parentNode; a && a.nodeType === 1; a = a.parentNode) {
+        const n = ln(a);
+        if (n === 'section-prototypes' || n === 'stylesheet' || n === 'prototype' || n === 'master-drawables') return true;
+      }
+      return false;
+    };
+    const bodies = textStorages.filter((t) => t.getAttribute('sf:kind') === 'body');
+    const body = bodies.find((t) => t.parentNode && ln(t.parentNode) === 'document') ||
+      bodies.filter((t) => !inTemplate(t)).pop() || bodies[bodies.length - 1];
+    if (body) {
+      const fnWrap = elChildren(body).find((c) => ln(c) === 'footnotes');
+      const fnStorage = fnWrap && elChildren(fnWrap).find((c) => ln(c) === 'text-storage');
+      if (fnStorage) {
+        const hasMark = (el) => el.getElementsByTagName('sf:footnote-mark').length > 0 ||
+          [...el.getElementsByTagName('*')].some((x) => ln(x) === 'footnote-mark');
+        const ps = [];
+        const walkFn = (el) => { for (const c of elChildren(el)) { if (ln(c) === 'p') ps.push(c); else if (!SKIP.has(ln(c))) walkFn(c); } };
+        walkFn(fnStorage);
+        for (const pEl of ps) {
+          const para = paragraphFrom(pEl, false).para;
+          if (hasMark(pEl)) footnoteGroups.push([para]);
+          else if (footnoteGroups.length && para.runs.some((r) => r.text && r.text.trim())) footnoteGroups[footnoteGroups.length - 1].push(para);
+        }
+        for (const g of footnoteGroups) {
+          const r0 = g[0].runs;
+          if (r0.length && r0[0].text) r0[0] = Object.assign({}, r0[0], { text: r0[0].text.replace(/^\s+/, '') });
+        }
+      }
+    }
+    let paragraphs = body ? collect(body) : [];
+    const bodyHasText = paragraphs.some((p) => p.runs.some((r) => r.text && r.text.trim()));
+    const tbs = textStorages.filter((t) => t.getAttribute('sf:kind') === 'textbox' && !inTemplate(t));
+    if (tbs.length && (!bodyHasText || opts.textboxes)) {
+      if (!bodyHasText) { paragraphs = []; warnings.push('本文がないレイアウト書類のため、テキストボックスの文章を順に取り出しました（配置は再現されません）。'); }
+      for (const t of tbs) {
+        const ps = collect(t);
+        if (!ps.length) continue;
+        if (paragraphs.length) paragraphs.push({ separator: true });
+        paragraphs.push(...ps);
+      }
+    }
+    if (!paragraphs.length) throw new ConvertError('書類から文章を見つけられませんでした。');
+    while (paragraphs.length > 1 && !paragraphs[paragraphs.length - 1].runs?.length) paragraphs.pop();
+    warnings.push("Pages '09 形式は文章・見出し・文字書式・脚注・リンクを変換します（箇条書き記号・画像・表は対象外）。");
+    return { paragraphs, warnings, stats, format: "Pages '09 以前" };
+  }
+
+  // ------------------------------------------------------------------
+  // 画像判定
+  // ------------------------------------------------------------------
+  function sniffImage(b) {
+    const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+    if (b.length > 24 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) {
+      return { ext: 'png', w: dv.getUint32(16), h: dv.getUint32(20) };
+    }
+    if (b.length > 10 && b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) {
+      return { ext: 'gif', w: dv.getUint16(6, true), h: dv.getUint16(8, true) };
+    }
+    if (b.length > 4 && b[0] === 0xff && b[1] === 0xd8) {
+      let p = 2;
+      while (p + 9 < b.length) {
+        if (b[p] !== 0xff) { p++; continue; }
+        const marker = b[p + 1];
+        if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) { p += 2; continue; }
+        const len = dv.getUint16(p + 2);
+        if ((marker >= 0xc0 && marker <= 0xcf) && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+          return { ext: 'jpeg', w: dv.getUint16(p + 7), h: dv.getUint16(p + 5) };
+        }
+        p += 2 + len;
+      }
+      return { ext: 'jpeg', w: 0, h: 0 };
+    }
+    if (b.length > 26 && b[0] === 0x42 && b[1] === 0x4d) {
+      return { ext: 'bmp', w: dv.getInt32(18, true), h: Math.abs(dv.getInt32(22, true)) };
+    }
+    return null;
+  }
+
+  // ------------------------------------------------------------------
+  // フォント名
+  // ------------------------------------------------------------------
+  const FONT_FAMILY = {
+    HiraginoSans: 'Hiragino Sans', HiraKakuProN: 'Hiragino Kaku Gothic ProN', HiraKakuPro: 'Hiragino Kaku Gothic Pro',
+    HiraKakuStdN: 'Hiragino Kaku Gothic StdN', HiraKakuStd: 'Hiragino Kaku Gothic Std', HiraMinProN: 'Hiragino Mincho ProN',
+    HiraMinPro: 'Hiragino Mincho Pro', HiraMaruProN: 'Hiragino Maru Gothic ProN', HiraMaruPro: 'Hiragino Maru Gothic Pro',
+    HiraginoSansGB: 'Hiragino Sans GB', HiraginoSansCNS: 'Hiragino Sans CNS', YuGothic: 'Yu Gothic', YuMincho: 'Yu Mincho',
+    YuKyo: 'YuKyokasho', ToppanBunkyuMincho: 'Toppan Bunkyu Mincho', ToppanBunkyuGothic: 'Toppan Bunkyu Gothic',
+    ToppanBunkyuMidashiMincho: 'Toppan Bunkyu Midashi Mincho', ToppanBunkyuMidashiGothic: 'Toppan Bunkyu Midashi Gothic',
+    KozGoPr6N: 'Kozuka Gothic Pr6N', KozMinPr6N: 'Kozuka Mincho Pr6N', Osaka: 'Osaka', 'Osaka-Mono': 'Osaka-Mono',
+    'MS-Mincho': 'MS Mincho', 'MS-Gothic': 'MS Gothic', 'MS-PMincho': 'MS PMincho', 'MS-PGothic': 'MS PGothic',
+    Meiryo: 'Meiryo', TimesNewRomanPSMT: 'Times New Roman', TimesNewRomanPS: 'Times New Roman', ArialMT: 'Arial',
+    CourierNewPSMT: 'Courier New', CourierNewPS: 'Courier New', HelveticaNeue: 'Helvetica Neue', Helvetica: 'Helvetica',
+    AvenirNext: 'Avenir Next', AvenirNextCondensed: 'Avenir Next Condensed', GillSans: 'Gill Sans',
+    AmericanTypewriter: 'American Typewriter', BodoniSvtyTwoITCTT: 'Bodoni 72', PalatinoLinotype: 'Palatino Linotype',
+    TrebuchetMS: 'Trebuchet MS', ComicSansMS: 'Comic Sans MS', SFPro: 'SF Pro', SFProText: 'SF Pro Text', SFProDisplay: 'SF Pro Display',
+    SFMono: 'SF Mono', Times: 'Times', Calibri: 'Calibri', Cambria: 'Cambria',
+  };
+  const WIN_FONT = {
+    'Hiragino Sans': 'Yu Gothic', 'Hiragino Kaku Gothic ProN': 'Yu Gothic', 'Hiragino Kaku Gothic Pro': 'Yu Gothic',
+    'Hiragino Kaku Gothic StdN': 'Yu Gothic', 'Hiragino Kaku Gothic Std': 'Yu Gothic', 'Hiragino Maru Gothic ProN': 'Yu Gothic',
+    'Hiragino Maru Gothic Pro': 'Yu Gothic', 'Hiragino Mincho ProN': 'Yu Mincho', 'Hiragino Mincho Pro': 'Yu Mincho',
+    'Toppan Bunkyu Mincho': 'Yu Mincho', 'Toppan Bunkyu Midashi Mincho': 'Yu Mincho', 'Toppan Bunkyu Gothic': 'Yu Gothic',
+    'Toppan Bunkyu Midashi Gothic': 'Yu Gothic', YuKyokasho: 'Yu Mincho', Osaka: 'Yu Gothic', 'Osaka-Mono': 'MS Gothic',
+    'Kozuka Gothic Pr6N': 'Yu Gothic', 'Kozuka Mincho Pr6N': 'Yu Mincho',
+    'Helvetica Neue': 'Arial', Helvetica: 'Arial', 'SF Pro': 'Segoe UI', 'SF Pro Text': 'Segoe UI', 'SF Pro Display': 'Segoe UI',
+    'Avenir Next': 'Segoe UI', Avenir: 'Segoe UI', 'Gill Sans': 'Gill Sans MT', Menlo: 'Consolas', Monaco: 'Consolas',
+    'SF Mono': 'Consolas', Times: 'Times New Roman', Palatino: 'Palatino Linotype', Optima: 'Candara', Futura: 'Century Gothic',
+  };
+
+  function fontFamily(ps, mode) {
+    if (!ps || mode === 'none') return null;
+    if (/^\.|^(System|AppleSystemUIFont)/.test(ps)) return null;
+    let fam;
+    if (/\s/.test(ps)) fam = ps;
+    else if (FONT_FAMILY[ps]) fam = FONT_FAMILY[ps];
+    else {
+      const parts = ps.split('-');
+      let base = parts[0];
+      for (let k = parts.length; k > 0 && !fam; k--) { const cand = parts.slice(0, k).join('-'); if (FONT_FAMILY[cand]) fam = FONT_FAMILY[cand]; }
+      if (!fam) fam = base.replace(/(PS)?MT$/, '').replace(/([a-z])([A-Z])/g, '$1 $2').trim() || base;
+    }
+    if (mode === 'windows' && WIN_FONT[fam]) fam = WIN_FONT[fam];
+    return fam;
+  }
+
+  // ------------------------------------------------------------------
+  // DOCX 生成
+  // ------------------------------------------------------------------
+  const NS_W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const NS_R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const NS_WP = 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing';
+  const NS_A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
+  const NS_PIC = 'http://schemas.openxmlformats.org/drawingml/2006/picture';
+  const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+
+  const esc = (s) => String(s)
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/g, '')
+    .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const tw = (pt) => Math.round(pt * 20);
+  const PAGE_TEXT_WIDTH_PT = (11906 - 2 * 1440) / 20;
+
+  function numFmtOf(nt) {
+    // [numFmt, 書式]
+    const style = (k) => (k === 1 ? '(%)' : k === 2 ? '%)' : '%.');
+    if (nt === undefined || nt === null) return ['decimal', '%.'];
+    if (nt <= 2) return ['decimal', style(nt)];
+    if (nt <= 5) return ['upperRoman', style(nt - 3)];
+    if (nt <= 8) return ['lowerRoman', style(nt - 6)];
+    if (nt <= 11) return ['upperLetter', style(nt - 9)];
+    if (nt <= 14) return ['lowerLetter', style(nt - 12)];
+    if (nt <= 17) return ['japaneseCounting', nt === 15 ? '%、' : style(nt - 15)];
+    if (nt <= 20) return ['aiueoFullWidth', nt === 18 ? '%、' : style(nt - 18)];
+    if (nt <= 23) return ['aiueoFullWidth', nt === 21 ? '%、' : style(nt - 21)];
+    return ['decimal', '%.'];
+  }
+
+  function buildDocx(model, opts, title) {
+    const mode = opts.mode; // 'full' | 'structure'
+    const full = mode === 'full';
+    const rels = [];
+    const fnRels = [];
+    const media = [];
+    let relSeq = 10, picSeq = 1;
+    const footnoteXml = [];
+    let fnSeq = 1;
+
+    // 箇条書き定義
+    const lists = new Map();
+    for (const p of model.paragraphs) {
+      if (p.list && !lists.has(p.list.key)) lists.set(p.list.key, { def: p.list.def, numId: lists.size + 1 });
+    }
+
+    function rPr(props, extra) {
+      const x = [];
+      if (extra) x.push(extra);
+      if (!props) props = {};
+      if (full) {
+        const fam = fontFamily(props.font, opts.font);
+        if (fam) { const f = esc(fam); x.push(`<w:rFonts w:ascii="${f}" w:hAnsi="${f}" w:eastAsia="${f}" w:cs="${f}"/>`); }
+      }
+      if (props.bold) x.push('<w:b/><w:bCs/>'); else if (full && props.bold === false) x.push('<w:b w:val="0"/><w:bCs w:val="0"/>');
+      if (props.italic) x.push('<w:i/><w:iCs/>'); else if (full && props.italic === false) x.push('<w:i w:val="0"/><w:iCs w:val="0"/>');
+      if (full && props.caps === 'all') x.push('<w:caps/>');
+      if (full && props.caps === 'small') x.push('<w:smallCaps/>');
+      if (props.strike === 'single') x.push('<w:strike/>');
+      if (props.strike === 'double') x.push('<w:dstrike/>');
+      if (full && props.color) x.push(`<w:color w:val="${props.color}"/>`);
+      if (full && props.size) { const hp = Math.max(2, Math.round(props.size * 2)); x.push(`<w:sz w:val="${hp}"/><w:szCs w:val="${hp}"/>`); }
+      if (props.underline && props.underline !== 'none') x.push(`<w:u w:val="${props.underline === 'wave' ? 'wave' : props.underline}"/>`);
+      if (full && props.highlight) x.push(`<w:shd w:val="clear" w:color="auto" w:fill="${props.highlight}"/>`);
+      if (props.vert === 'superscript' || props.vert === 'subscript') x.push(`<w:vertAlign w:val="${props.vert}"/>`);
+      return x.length ? `<w:rPr>${x.join('')}</w:rPr>` : '';
+    }
+
+    function textRuns(text, rpr) {
+      let out = '';
+      const parts = text.split(/(\t|\u2028|\u000B|\n|\r)/);
+      for (const part of parts) {
+        if (!part) continue;
+        if (part === '\t') out += `<w:r>${rpr}<w:tab/></w:r>`;
+        else if (part === '\u2028' || part === '\u000B' || part === '\n' || part === '\r') out += `<w:r>${rpr}<w:br/></w:r>`;
+        else {
+          const clean = part.replace(/[\uFFFC￹-￻​]/g, '');
+          if (clean) out += `<w:r>${rpr}<w:t xml:space="preserve">${esc(clean)}</w:t></w:r>`;
+        }
+      }
+      return out;
+    }
+
+    function imageXml(img, inFootnote) {
+      const rid = 'rId' + relSeq++;
+      const idx = media.length + 1;
+      const fname = `image${idx}.${img.ext === 'jpeg' ? 'jpeg' : img.ext}`;
+      media.push({ path: 'word/media/' + fname, bytes: img.bytes, ext: img.ext });
+      (inFootnote ? fnRels : rels).push(`<Relationship Id="${rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/${fname}"/>`);
+      let w = img.w > 0 ? img.w : 200, h = img.h > 0 ? img.h : 150;
+      if (w > PAGE_TEXT_WIDTH_PT) { h = h * PAGE_TEXT_WIDTH_PT / w; w = PAGE_TEXT_WIDTH_PT; }
+      const cx = Math.round(w * 12700), cy = Math.round(h * 12700);
+      const id = picSeq++;
+      return `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/>` +
+        `<wp:docPr id="${id}" name="Picture ${id}" descr="${esc(img.name || '')}"/><wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="${NS_A}" noChangeAspect="1"/></wp:cNvGraphicFramePr>` +
+        `<a:graphic xmlns:a="${NS_A}"><a:graphicData uri="${NS_PIC}"><pic:pic xmlns:pic="${NS_PIC}">` +
+        `<pic:nvPicPr><pic:cNvPr id="${id}" name="${fname}"/><pic:cNvPicPr/></pic:nvPicPr>` +
+        `<pic:blipFill><a:blip r:embed="${rid}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>` +
+        `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>` +
+        `</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+    }
+
+    function runsXml(runs, inFootnote) {
+      let out = '';
+      for (const r of runs) {
+        if (r.image) { out += imageXml(r.image, inFootnote); continue; }
+        if (r.footnote) {
+          if (inFootnote) continue;
+          const id = fnSeq++;
+          let body = '';
+          r.footnote.forEach((fp, k) => {
+            if (fp.separator) return;
+            const lead = k === 0 ? '<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteRef/></w:r><w:r><w:t xml:space="preserve"> </w:t></w:r>' : '';
+            body += `<w:p><w:pPr><w:pStyle w:val="FootnoteText"/></w:pPr>${lead}${runsXml(fp.runs, true)}</w:p>`;
+          });
+          if (!body) body = '<w:p><w:pPr><w:pStyle w:val="FootnoteText"/></w:pPr><w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteRef/></w:r></w:p>';
+          footnoteXml.push(`<w:footnote w:id="${id}">${body}</w:footnote>`);
+          out += `<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteReference w:id="${id}"/></w:r>`;
+          continue;
+        }
+        if (!r.text) continue;
+        if (r.link && /^(https?:|mailto:|ftp:|file:)/i.test(r.link)) {
+          const rid = 'rId' + relSeq++;
+          (inFootnote ? fnRels : rels).push(`<Relationship Id="${rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${esc(r.link)}" TargetMode="External"/>`);
+          out += `<w:hyperlink r:id="${rid}">${textRuns(r.text, rPr(r.props, '<w:rStyle w:val="Hyperlink"/>'))}</w:hyperlink>`;
+        } else {
+          out += textRuns(r.text, rPr(r.props, r.placeholder ? '<w:rStyle w:val="Placeholder"/>' : ''));
+        }
+      }
+      return out;
+    }
+
+    const STYLE_ID = { title: 'Title', subtitle: 'Subtitle' };
+    function paragraphXml(p) {
+      if (p.separator) return '<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="4" w:space="1" w:color="BFBFBF"/></w:pBdr></w:pPr></w:p>';
+      const x = [];
+      const sid = p.heading ? (STYLE_ID[p.heading] || 'Heading' + p.heading) : null;
+      if (sid) x.push(`<w:pStyle w:val="${sid}"/>`);
+      else if (p.list) x.push('<w:pStyle w:val="ListParagraph"/>');
+      const q = p.para || {};
+      if (full && q.keepNext) x.push('<w:keepNext/>');
+      if (p.pageBreakBefore) x.push('<w:pageBreakBefore/>');
+      if (p.list) x.push(`<w:numPr><w:ilvl w:val="${p.list.level}"/><w:numId w:val="${lists.get(p.list.key).numId}"/></w:numPr>`);
+      if (full) {
+        const sp = [];
+        if (q.spaceBefore !== undefined) sp.push(`w:before="${tw(q.spaceBefore)}"`);
+        if (q.spaceAfter !== undefined) sp.push(`w:after="${tw(q.spaceAfter)}"`);
+        if (q.lineSpacing) {
+          const ls = q.lineSpacing;
+          if (ls.mode === 'auto') sp.push(`w:line="${Math.round(ls.amount * 240)}" w:lineRule="auto"`);
+          else if (ls.mode === 'atLeast') sp.push(`w:line="${tw(ls.amount)}" w:lineRule="atLeast"`);
+          else if (ls.mode === 'exact') sp.push(`w:line="${tw(ls.amount)}" w:lineRule="exact"`);
+        }
+        if (sp.length) x.push(`<w:spacing ${sp.join(' ')}/>`);
+        if (!p.list) {
+          const ind = [];
+          const left = q.leftIndent || 0, first = q.firstIndent || 0, right = q.rightIndent || 0;
+          // Pages の firstLineIndent は 1 行目の左端（絶対位置）、Word は left からの相対
+          if (left) ind.push(`w:left="${tw(left)}"`);
+          if (right) ind.push(`w:right="${tw(right)}"`);
+          const rel = first - left;
+          if (first && rel > 0) ind.push(`w:firstLine="${tw(rel)}"`);
+          else if (first && rel < 0) ind.push(`w:hanging="${tw(-rel)}"`);
+          if (ind.length) x.push(`<w:ind ${ind.join(' ')}/>`);
+        }
+        if (q.align) x.push(`<w:jc w:val="${q.align}"/>`);
+      }
+      const ppr = x.length ? `<w:pPr>${x.join('')}</w:pPr>` : '';
+      return `<w:p>${ppr}${runsXml(p.runs, false)}</w:p>`;
+    }
+
+    const bodyXml = model.paragraphs.map(paragraphXml).join('');
+    const sectPr = '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/><w:cols w:space="720"/><w:docGrid w:linePitch="360"/></w:sectPr>';
+    const documentXml = XML_HEAD +
+      `<w:document xmlns:w="${NS_W}" xmlns:r="${NS_R}" xmlns:wp="${NS_WP}" xmlns:a="${NS_A}" xmlns:pic="${NS_PIC}"><w:body>${bodyXml}${sectPr}</w:body></w:document>`;
+
+    // styles.xml
+    const hSizes = { 1: 32, 2: 26, 3: 24, 4: 22, 5: 22, 6: 21 };
+    let headingStyles = '';
+    for (let i = 1; i <= 6; i++) {
+      headingStyles += `<w:style w:type="paragraph" w:styleId="Heading${i}"><w:name w:val="heading ${i}"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/>` +
+        `<w:pPr><w:keepNext/><w:spacing w:before="${i <= 2 ? 360 : 240}" w:after="120"/><w:outlineLvl w:val="${i - 1}"/></w:pPr><w:rPr><w:b/><w:bCs/><w:sz w:val="${hSizes[i]}"/><w:szCs w:val="${hSizes[i]}"/></w:rPr></w:style>`;
+    }
+    const stylesXml = XML_HEAD +
+      `<w:styles xmlns:w="${NS_W}"><w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="21"/><w:szCs w:val="21"/><w:lang w:val="en-US" w:eastAsia="ja-JP" w:bidi="ar-SA"/></w:rPr></w:rPrDefault>` +
+      `<w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="300" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>` +
+      `<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style>` +
+      `<w:style w:type="character" w:default="1" w:styleId="DefaultParagraphFont"><w:name w:val="Default Paragraph Font"/><w:uiPriority w:val="1"/><w:semiHidden/></w:style>` +
+      `<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:after="240"/><w:jc w:val="center"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:b/><w:sz w:val="40"/><w:szCs w:val="40"/></w:rPr></w:style>` +
+      `<w:style w:type="paragraph" w:styleId="Subtitle"><w:name w:val="Subtitle"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:after="240"/><w:jc w:val="center"/></w:pPr><w:rPr><w:color w:val="595959"/><w:sz w:val="26"/><w:szCs w:val="26"/></w:rPr></w:style>` +
+      headingStyles +
+      `<w:style w:type="paragraph" w:styleId="ListParagraph"><w:name w:val="List Paragraph"/><w:basedOn w:val="Normal"/><w:qFormat/></w:style>` +
+      `<w:style w:type="character" w:styleId="Hyperlink"><w:name w:val="Hyperlink"/><w:basedOn w:val="DefaultParagraphFont"/><w:rPr><w:color w:val="0563C1"/><w:u w:val="single"/></w:rPr></w:style>` +
+      `<w:style w:type="character" w:styleId="Placeholder"><w:name w:val="Pages Placeholder"/><w:basedOn w:val="DefaultParagraphFont"/><w:rPr><w:color w:val="A6A6A6"/></w:rPr></w:style>` +
+      `<w:style w:type="paragraph" w:styleId="FootnoteText"><w:name w:val="footnote text"/><w:basedOn w:val="Normal"/><w:rPr><w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr></w:style>` +
+      `<w:style w:type="character" w:styleId="FootnoteReference"><w:name w:val="footnote reference"/><w:basedOn w:val="DefaultParagraphFont"/><w:rPr><w:vertAlign w:val="superscript"/></w:rPr></w:style>` +
+      `</w:styles>`;
+
+    // numbering.xml
+    let numberingXml = null;
+    if (lists.size) {
+      let abs = '', nums = '';
+      for (const [, l] of lists) {
+        let lvls = '';
+        for (let i = 0; i < 9; i++) {
+          const d = l.def;
+          const pickArr = (arr) => (arr.length ? arr[Math.min(i, arr.length - 1)] : undefined);
+          const lt = pickArr(d.labelTypes);
+          const left = 360 * (i + 1) + 360, hang = 360;
+          let fmt, text;
+          if (lt === 3) {
+            const [nf, pat] = numFmtOf(pickArr(d.numberTypes));
+            const tiered = pickArr(d.tiered);
+            fmt = nf;
+            if (tiered) { let t = ''; for (let k = 1; k <= i + 1; k++) t += `%${k}.`; text = t; }
+            else text = pat.replace('%', `%${i + 1}`);
+          } else if (lt === 0) { fmt = 'none'; text = ''; }
+          else { fmt = 'bullet'; text = (pickArr(d.strings) || '•').trim() || '•'; }
+          lvls += `<w:lvl w:ilvl="${i}"><w:start w:val="1"/><w:numFmt w:val="${fmt}"/><w:lvlText w:val="${esc(text)}"/><w:lvlJc w:val="left"/>` +
+            `<w:pPr><w:ind w:left="${left}" w:hanging="${hang}"/></w:pPr></w:lvl>`;
+        }
+        abs += `<w:abstractNum w:abstractNumId="${l.numId}"><w:multiLevelType w:val="hybridMultilevel"/>${lvls}</w:abstractNum>`;
+        nums += `<w:num w:numId="${l.numId}"><w:abstractNumId w:val="${l.numId}"/></w:num>`;
+      }
+      numberingXml = XML_HEAD + `<w:numbering xmlns:w="${NS_W}">${abs}${nums}</w:numbering>`;
+    }
+
+    const footnotesXml = footnoteXml.length ? XML_HEAD +
+      `<w:footnotes xmlns:w="${NS_W}" xmlns:r="${NS_R}" xmlns:wp="${NS_WP}" xmlns:a="${NS_A}" xmlns:pic="${NS_PIC}">` +
+      `<w:footnote w:type="separator" w:id="-1"><w:p><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:r><w:separator/></w:r></w:p></w:footnote>` +
+      `<w:footnote w:type="continuationSeparator" w:id="0"><w:p><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:r><w:continuationSeparator/></w:r></w:p></w:footnote>` +
+      footnoteXml.join('') + `</w:footnotes>` : null;
+
+    const settingsXml = XML_HEAD + `<w:settings xmlns:w="${NS_W}"><w:defaultTabStop w:val="720"/>` +
+      (footnotesXml ? '<w:footnotePr><w:footnote w:id="-1"/><w:footnote w:id="0"/></w:footnotePr>' : '') +
+      `<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>`;
+
+    const docRels = [
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>',
+      '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>',
+    ];
+    if (numberingXml) docRels.push('<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>');
+    if (footnotesXml) docRels.push('<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes" Target="footnotes.xml"/>');
+    docRels.push(...rels);
+
+    const exts = new Set(media.map((m) => m.ext));
+    const ct = XML_HEAD + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+      '<Default Extension="xml" ContentType="application/xml"/>' +
+      [...exts].map((e) => `<Default Extension="${e}" ContentType="image/${e === 'bmp' ? 'bmp' : e}"/>`).join('') +
+      '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
+      '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>' +
+      '<Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>' +
+      (numberingXml ? '<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>' : '') +
+      (footnotesXml ? '<Override PartName="/word/footnotes.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml"/>' : '') +
+      '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>' +
+      '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>' +
+      '</Types>';
+
+    const now = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
+    const core = XML_HEAD + '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">' +
+      `<dc:title>${esc(title || '')}</dc:title><dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified></cp:coreProperties>`;
+    const app = XML_HEAD + '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>Pages to DOCX (local)</Application></Properties>';
+    const rootRels = XML_HEAD + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>' +
+      '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>' +
+      '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>' +
+      '</Relationships>';
+
+    const files = [
+      ['[Content_Types].xml', ct],
+      ['_rels/.rels', rootRels],
+      ['docProps/core.xml', core],
+      ['docProps/app.xml', app],
+      ['word/document.xml', documentXml],
+      ['word/styles.xml', stylesXml],
+      ['word/settings.xml', settingsXml],
+      ['word/_rels/document.xml.rels', XML_HEAD + `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${docRels.join('')}</Relationships>`],
+    ];
+    if (numberingXml) files.push(['word/numbering.xml', numberingXml]);
+    if (footnotesXml) {
+      files.push(['word/footnotes.xml', footnotesXml]);
+      if (fnRels.length) files.push(['word/_rels/footnotes.xml.rels', XML_HEAD + `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${fnRels.join('')}</Relationships>`]);
+    }
+    for (const m of media) files.push([m.path, m.bytes]);
+    return files.map(([n, d]) => [n, typeof d === 'string' ? te.encode(d) : d]);
+  }
+
+  // ------------------------------------------------------------------
+  // ZIP 書き出し
+  // ------------------------------------------------------------------
+  const CRC_TABLE = (() => {
+    const t = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
+    return t;
+  })();
+  function crc32(u8) {
+    let c = 0xffffffff;
+    for (let i = 0; i < u8.length; i++) c = CRC_TABLE[(c ^ u8[i]) & 0xff] ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+  }
+
+  async function writeZip(files) {
+    const d = new Date();
+    const dosTime = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+    const dosDate = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+    const chunks = [], central = [];
+    let offset = 0;
+    for (const [name, data] of files) {
+      const nameB = te.encode(name);
+      const crc = crc32(data);
+      const already = /\.(png|jpe?g|gif)$/i.test(name);
+      let comp = already ? null : await deflateRaw(data);
+      let method = 8;
+      if (!comp || comp.length >= data.length) { comp = data; method = 0; }
+      const lh = new Uint8Array(30 + nameB.length);
+      const lv = new DataView(lh.buffer);
+      lv.setUint32(0, 0x04034b50, true); lv.setUint16(4, 20, true); lv.setUint16(6, 0x0800, true);
+      lv.setUint16(8, method, true); lv.setUint16(10, dosTime, true); lv.setUint16(12, dosDate, true);
+      lv.setUint32(14, crc, true); lv.setUint32(18, comp.length, true); lv.setUint32(22, data.length, true);
+      lv.setUint16(26, nameB.length, true); lv.setUint16(28, 0, true);
+      lh.set(nameB, 30);
+      const ch = new Uint8Array(46 + nameB.length);
+      const cv = new DataView(ch.buffer);
+      cv.setUint32(0, 0x02014b50, true); cv.setUint16(4, 20, true); cv.setUint16(6, 20, true); cv.setUint16(8, 0x0800, true);
+      cv.setUint16(10, method, true); cv.setUint16(12, dosTime, true); cv.setUint16(14, dosDate, true);
+      cv.setUint32(16, crc, true); cv.setUint32(20, comp.length, true); cv.setUint32(24, data.length, true);
+      cv.setUint16(28, nameB.length, true); cv.setUint32(42, offset, true);
+      ch.set(nameB, 46);
+      chunks.push(lh, comp);
+      central.push(ch);
+      offset += lh.length + comp.length;
+    }
+    const cd = concat(central);
+    const end = new Uint8Array(22);
+    const ev = new DataView(end.buffer);
+    ev.setUint32(0, 0x06054b50, true);
+    ev.setUint16(8, files.length, true); ev.setUint16(10, files.length, true);
+    ev.setUint32(12, cd.length, true); ev.setUint32(16, offset, true);
+    return concat([...chunks, cd, end]);
+  }
+
+  // ------------------------------------------------------------------
+  // 公開 API
+  // ------------------------------------------------------------------
+  const DEFAULTS = { mode: 'full', font: 'keep', images: true, placeholders: true, textboxes: false };
+
+  async function findPreview(fs) {
+    for (const n of ['preview.jpg', 'preview-web.jpg', 'QuickLook/Thumbnail.jpg', 'preview-micro.jpg']) {
+      if (fs.names.includes(n)) { try { return await fs.read(n); } catch (_) { /* ignore */ } }
+    }
+    return null;
+  }
+
+  async function analyze(input, options) {
+    const opts = Object.assign({}, DEFAULTS, options);
+    const fs = await openPackage(input);
+    if (fs.names.some((n) => /(^|\/)\.iwp(h|v2)$/.test(n))) throw new ConvertError(PWD_MSG);
+    let model;
+    if (fs.names.some((n) => /^Index\/.+\.iwa$/.test(n))) {
+      model = await buildIwaModel(fs, opts);
+    } else if (fs.names.includes('index.xml') || fs.names.includes('index.xml.gz')) {
+      let xml = fs.names.includes('index.xml') ? await fs.read('index.xml') : await gunzip(await fs.read('index.xml.gz'));
+      if (xml.length && xml[0] === 0x1f && xml[1] === 0x8b) xml = await gunzip(xml);
+      if (!xml.length) throw new ConvertError(PWD_MSG);
+      const head = td.decode(xml.subarray(0, 200));
+      if (!/^\s*(\uFEFF)?</.test(head)) throw new ConvertError(PWD_MSG);
+      model = buildXmlModel(td.decode(xml), opts);
+    } else {
+      throw new ConvertError('Pages の書類として認識できませんでした（Index フォルダも index.xml も見つかりません）。');
+    }
+    model.preview = await findPreview(fs);
+    return model;
+  }
+
+  async function convert(input, options, title) {
+    const opts = Object.assign({}, DEFAULTS, options);
+    const model = await analyze(input, opts);
+    const files = buildDocx(model, opts, title);
+    const docx = await writeZip(files);
+    return { docx, model };
+  }
+
+  /** 中間モデル → プレビュー用 HTML（UI 用） */
+  function previewHtml(model, limit = 400) {
+    const out = [];
+    let n = 0;
+    for (const p of model.paragraphs) {
+      if (n++ >= limit) { out.push('<p class="pv-more">…（以下省略）</p>'); break; }
+      if (p.separator) { out.push('<hr>'); continue; }
+      let inner = '';
+      for (const r of p.runs) {
+        if (r.image) { inner += '<span class="pv-ph">［画像］</span>'; continue; }
+        if (r.footnote) { inner += '<sup class="pv-fn">※</sup>'; continue; }
+        if (!r.text) continue;
+        let t = esc(r.text.replace(/[\uFFFC]/g, '')).replace(/[\u2028\u000B]/g, '<br>').replace(/\t/g, ' ');
+        const pr = r.props || {};
+        if (r.placeholder) t = `<span class="pv-ph">${t}</span>`;
+        if (pr.bold) t = `<b>${t}</b>`;
+        if (pr.italic) t = `<i>${t}</i>`;
+        if (pr.underline && pr.underline !== 'none') t = `<u>${t}</u>`;
+        if (pr.strike && pr.strike !== 'none') t = `<s>${t}</s>`;
+        if (pr.vert === 'superscript') t = `<sup>${t}</sup>`;
+        if (pr.vert === 'subscript') t = `<sub>${t}</sub>`;
+        if (r.link) t = `<a href="${esc(r.link)}" target="_blank" rel="noopener">${t}</a>`;
+        inner += t;
+      }
+      if (!inner) inner = '&nbsp;';
+      const tag = p.heading === 'title' ? 'h1' : p.heading === 'subtitle' ? 'h3' : p.heading ? 'h' + Math.min(6, p.heading + 1) : 'p';
+      const cls = p.heading === 'title' ? ' class="pv-title"' : p.heading === 'subtitle' ? ' class="pv-subtitle"' : '';
+      const li = p.list ? ` class="pv-li" style="margin-left:${1.2 + p.list.level * 1.2}em"` : '';
+      out.push(p.list ? `<p${li}>${inner}</p>` : `<${tag}${cls}>${inner}</${tag}>`);
+    }
+    return out.join('\n');
+  }
+
+  root.PagesToDocx = { convert, analyze, previewHtml, ConvertError, writeZip, _internal: { buildDocx, snappyUncompress, readZip, pb, P, parseIwa, headingOf, fontFamily, crc32 } };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+(function () {
+  'use strict';
+  const C = window.PagesToDocx;
+  const $ = (s) => document.querySelector(s);
+  const items = [];
+  let seq = 0;
+
+  // ---- ダウンロード（公開ページでは downloads 機能、ローカルでは通常のダウンロード） ----
+  let dlCap = null;
+  try {
+    if (window.claude && typeof window.claude.use === 'function') {
+      window.claude.use('downloads').then((d) => { dlCap = d; }).catch(() => {});
+    }
+  } catch (_) { /* ignore */ }
+
+  async function saveFile(name, u8, mime) {
+    if (dlCap) {
+      try { await dlCap.save({ filename: name, data: new Blob([u8]) }); return; }
+      catch (e) {
+        if (e && (e.code === 'declined' || e.code === 'rate_limited')) { if (e.code === 'rate_limited') toast('保存の確認が開いています。少し待ってからもう一度お試しください。'); return; }
+      }
+    }
+    const url = URL.createObjectURL(new Blob([u8], { type: mime }));
+    const a = document.createElement('a');
+    a.href = url; a.download = name; a.rel = 'noopener';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+
+  let toastTimer;
+  function toast(msg) {
+    const t = $('#toast');
+    t.textContent = msg; t.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 3200);
+  }
+
+  // ---- オプション ----
+  const MODE_HINT = {
+    full: 'フォント・サイズ・色・配置・インデントなどもできるだけ再現します。',
+    structure: '見出し・リスト・太字などの構造だけを残し、見た目の指定は Word の標準スタイルに任せます（Markdown 変換向け）。',
+  };
+  const FONT_HINT = {
+    keep: 'Pages で使われていたフォント名をそのまま指定します（Mac で開く場合に最適）。',
+    windows: 'ヒラギノ角ゴ→游ゴシック、ヒラギノ明朝→游明朝、Helvetica→Arial のように Windows にあるフォントへ置き換えます。',
+    none: 'フォントを指定せず、Word の既定フォントで表示します。',
+  };
+  function getOpts() {
+    return {
+      mode: document.querySelector('input[name=mode]:checked').value,
+      font: document.querySelector('input[name=font]:checked').value,
+      images: $('#optImages').checked,
+      placeholders: $('#optPlaceholders').checked,
+      textboxes: $('#optTextboxes').checked,
+    };
+  }
+  function syncHints() {
+    const o = getOpts();
+    $('#modeHint').textContent = MODE_HINT[o.mode];
+    $('#fontHint').textContent = FONT_HINT[o.font];
+    $('#fontRow').style.opacity = o.mode === 'structure' ? '.45' : '';
+    document.querySelectorAll('input[name=font]').forEach((i) => { i.disabled = o.mode === 'structure'; });
+  }
+  let reconvTimer;
+  document.querySelectorAll('.opts input').forEach((el) => el.addEventListener('change', () => {
+    syncHints();
+    clearTimeout(reconvTimer);
+    reconvTimer = setTimeout(() => { items.forEach((it) => convertItem(it)); }, 120);
+  }));
+  syncHints();
+
+  // ---- 入力 ----
+  const baseName = (n) => n.replace(/\/+$/, '').split('/').pop().replace(/\.pages$/i, '');
+  async function readFile(f) { return new Uint8Array(await f.arrayBuffer()); }
+
+  function addItem(name, loader) {
+    const it = { id: ++seq, name, loader, input: null, result: null, error: null, busy: true, previewOpen: false, thumbUrl: null };
+    items.push(it);
+    render();
+    (async () => {
+      try { it.input = await loader(); }
+      catch (e) { it.error = 'ファイルを読み込めませんでした: ' + (e && e.message || e); it.busy = false; render(); return; }
+      convertItem(it);
+    })();
+  }
+
+  async function convertItem(it) {
+    if (!it.input) return;
+    const token = (it.token = (it.token || 0) + 1);
+    it.busy = true; renderItem(it);
+    try {
+      const opts = getOpts();
+      const { docx, model } = await C.convert(it.input, opts, it.name);
+      if (token !== it.token) return;
+      it.result = { docx, model }; it.error = null;
+      if (model.preview && !it.thumbUrl) it.thumbUrl = URL.createObjectURL(new Blob([model.preview], { type: 'image/jpeg' }));
+    } catch (e) {
+      if (token !== it.token) return;
+      if (!(e && e.name === 'ConvertError')) console.error(e);
+      it.result = null;
+      it.error = e && e.name === 'ConvertError' ? e.message : '変換中にエラーが発生しました（' + (e && e.message || e) + '）。対応していない形式か、ファイルが壊れている可能性があります。';
+    }
+    it.busy = false;
+    renderItem(it);
+    updateHead();
+  }
+
+  function handleFileList(files) {
+    const list = [...files];
+    const bundles = new Map(); // フォルダ選択時：xxx.pages/ 配下をまとめる
+    for (const f of list) {
+      const rel = f.webkitRelativePath || '';
+      const m = rel.match(/^(.*?[^/]+\.pages)\/(.+)$/i);
+      if (m) {
+        if (!bundles.has(m[1])) bundles.set(m[1], []);
+        bundles.get(m[1]).push([m[2], f]);
+      } else if (/\.pages$/i.test(f.name)) {
+        addItem(baseName(f.name), () => readFile(f));
+      }
+    }
+    for (const [dir, entries] of bundles) {
+      addItem(baseName(dir), async () => {
+        const map = new Map();
+        for (const [p, f] of entries) map.set(p, await readFile(f));
+        return map;
+      });
+    }
+    if (!list.some((f) => /\.pages$/i.test(f.name) || /\.pages\//i.test(f.webkitRelativePath || ''))) {
+      toast('.pages ファイルが見つかりませんでした');
+    }
+  }
+
+  // ドラッグ＆ドロップ（フォルダ＝パッケージ形式も読む）
+  function readEntries(dirEntry) {
+    const reader = dirEntry.createReader();
+    return new Promise((resolve, reject) => {
+      const all = [];
+      const next = () => reader.readEntries((ents) => { if (!ents.length) resolve(all); else { all.push(...ents); next(); } }, reject);
+      next();
+    });
+  }
+  const entryFile = (e) => new Promise((res, rej) => e.file(res, rej));
+  async function walkDir(dirEntry, prefix, map) {
+    for (const e of await readEntries(dirEntry)) {
+      if (e.isDirectory) await walkDir(e, prefix + e.name + '/', map);
+      else map.set(prefix + e.name, await readFile(await entryFile(e)));
+    }
+  }
+  async function handleEntry(entry) {
+    if (entry.isFile) {
+      if (/\.pages$/i.test(entry.name)) addItem(baseName(entry.name), async () => readFile(await entryFile(entry)));
+      return 0 + (/\.pages$/i.test(entry.name) ? 1 : 0);
+    }
+    if (/\.pages$/i.test(entry.name)) {
+      addItem(baseName(entry.name), async () => { const map = new Map(); await walkDir(entry, '', map); return map; });
+      return 1;
+    }
+    let n = 0;
+    for (const e of await readEntries(entry)) n += await handleEntry(e);
+    return n;
+  }
+
+  const drop = $('#drop');
+  ['dragenter', 'dragover'].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'dragend'].forEach((t) => drop.addEventListener(t, (e) => { if (e.target === drop) drop.classList.remove('over'); }));
+  document.addEventListener('dragover', (e) => e.preventDefault());
+  document.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    drop.classList.remove('over');
+    const dt = e.dataTransfer;
+    if (!dt) return;
+    const entries = [...(dt.items || [])].map((i) => (i.webkitGetAsEntry ? i.webkitGetAsEntry() : null)).filter(Boolean);
+    if (entries.length) {
+      let n = 0;
+      for (const en of entries) n += await handleEntry(en);
+      if (!n) toast('.pages ファイルが見つかりませんでした');
+    } else if (dt.files && dt.files.length) handleFileList(dt.files);
+  });
+
+  $('#pickFiles').addEventListener('click', () => $('#fileInput').click());
+  $('#pickDir').addEventListener('click', () => $('#dirInput').click());
+  $('#fileInput').addEventListener('change', (e) => { handleFileList(e.target.files); e.target.value = ''; });
+  $('#dirInput').addEventListener('change', (e) => { handleFileList(e.target.files); e.target.value = ''; });
+
+  // ---- 一括 ----
+  $('#dlAll').addEventListener('click', async () => {
+    const done = items.filter((i) => i.result);
+    if (!done.length) return;
+    const used = new Set();
+    const files = done.map((i) => {
+      let n = baseName(i.name) + '.docx', k = 2;
+      while (used.has(n)) n = baseName(i.name) + ` (${k++}).docx`;
+      used.add(n);
+      return [n, i.result.docx];
+    });
+    const zip = await C.writeZip(files);
+    saveFile('pages-converted.zip', zip, 'application/zip');
+  });
+  $('#clearAll').addEventListener('click', () => {
+    items.forEach((i) => i.thumbUrl && URL.revokeObjectURL(i.thumbUrl));
+    items.length = 0; render();
+  });
+
+  // ---- 描画 ----
+  const escH = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const fmtSize = (n) => (n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(1) + ' MB');
+
+  function updateHead() {
+    $('#dlAll').disabled = items.filter((i) => i.result).length < 2;
+    $('#clearAll').disabled = !items.length;
+  }
+
+  function render() {
+    const list = $('#list');
+    if (!items.length) { list.innerHTML = '<div class="empty">まだファイルがありません。</div>'; updateHead(); return; }
+    list.innerHTML = '';
+    for (const it of items) {
+      const el = document.createElement('article');
+      el.className = 'card'; el.id = 'item-' + it.id;
+      list.appendChild(el);
+      renderItem(it);
+    }
+    updateHead();
+  }
+
+  function renderItem(it) {
+    const el = document.getElementById('item-' + it.id);
+    if (!el) return;
+    const r = it.result;
+    let status = '';
+    if (it.busy) status = '<span class="status busy">変換中…</span>';
+    else if (it.error) status = '<span class="status err">失敗</span>';
+    else if (r) status = '<span class="status ok">完了</span>';
+    let meta = '';
+    if (r) {
+      const s = r.model.stats || {};
+      const parts = [r.model.format, `段落 ${r.model.paragraphs.filter((p) => !p.separator).length}`];
+      if (s.images) parts.push(`画像 ${s.images}`);
+      if (s.footnotes) parts.push(`脚注 ${s.footnotes}`);
+      if (s.lists) parts.push(`リスト項目 ${s.lists}`);
+      parts.push('docx ' + fmtSize(r.docx.length));
+      meta = parts.join(' ・ ');
+    }
+    const thumb = it.thumbUrl ? `<img class="thumb" src="${it.thumbUrl}" alt="">` : '<div class="thumb">プレビュー<br>なし</div>';
+    const warns = r && r.model.warnings.length ? `<ul class="warns">${r.model.warnings.map((w) => `<li>${escH(w)}</li>`).join('')}</ul>` : '';
+    const err = it.error ? `<div class="error">${escH(it.error)}</div>` : '';
+    el.innerHTML = `${thumb}<div>
+      <div class="name">${escH(it.name)}.pages ${status}</div>
+      <div class="meta">${escH(meta)}</div>
+      ${warns}${err}
+      <div class="btns">
+        <button class="primary" data-act="dl" ${r ? '' : 'disabled'}>.docx を保存</button>
+        <button data-act="pv" ${r ? '' : 'disabled'}>${it.previewOpen ? 'プレビューを閉じる' : '内容をプレビュー'}</button>
+        <button data-act="rm">削除</button>
+      </div>
+      <div class="preview ${it.previewOpen && r ? 'open' : ''}">${it.previewOpen && r ? C.previewHtml(r.model) : ''}</div>
+    </div>`;
+    el.querySelector('[data-act=dl]').onclick = () => saveFile(baseName(it.name) + '.docx', it.result.docx, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    el.querySelector('[data-act=pv]').onclick = () => { it.previewOpen = !it.previewOpen; renderItem(it); };
+    el.querySelector('[data-act=rm]').onclick = () => {
+      const i = items.indexOf(it);
+      if (i >= 0) items.splice(i, 1);
+      if (it.thumbUrl) URL.revokeObjectURL(it.thumbUrl);
+      render();
+    };
+  }
+})();
+</script>
+</body>
+</html>
